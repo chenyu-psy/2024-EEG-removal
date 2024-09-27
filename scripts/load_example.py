@@ -28,7 +28,7 @@ raw.set_montage(biosemi_montage, on_missing='warn')
 # 4 re-reference and plot
 ref_channels = ['EXG1','EXG5'] # left and right
 raw_ref,_ = mne.set_eeg_reference(raw, ref_channels)
-# raw_ref.plot(duration=5, n_channels=72)
+raw_ref.plot(duration=5, n_channels=72)
 
 # 5 downsample to 500 hz
 raw_ref_ds = raw_ref.copy().resample(500)
@@ -54,29 +54,25 @@ raw_ref_ds_fil = raw_ref_ds.copy().filter( l_freq=l_freq,h_freq = h_freq,picks =
 
 # 7 epoch
 # create event code dictionary bins
-event_dict = {'fix': 1,'encoding':2,'cue1':4,
-                'nodist':5,'dist':6,'cue2':7,'nodist_impulse':8,'dist_impulse':9,
-                'probe':10}
+event_dict = {
+        'other': 0,
+        'letter':1,
+        'character':2,
+        'object':3}
+
 timings = {
-            'encoding':0.25,
-            'delay1':0.5,
-            'cue1':0.5,
-            'delay2':0.5,
-            'dist':1,
-            'delay3':0.5,
-            'cue2':0.5,
-            'delay4':1,
-            'impulse':0.1,
-            'delay5':0.5,
-            'probe':1
+            'other': 0,
+            'letter':1.05,
+            'character':1.05,
+            'object':1.05
         }
 
 # visualize events
 #fig = mne.viz.plot_events(events, event_id=event_dict, sfreq=raw_ref_ds_fil.info['sfreq'],first_samp=raw_ref_ds_fil.first_samp)
 
 ## epoch
-epoch_dict = {'encoding': 2}
-int_time = [-0.3,6.35]
+epoch_dict = {'letter': 1}
+int_time = [-0.3,1.15]
 #epochs = mne.Epochs(raw_ref, events, event_id=event_dict, tmin=-0.2, tmax=0.5,reject=reject_criteria, preload=True)
 epochs = mne.Epochs(raw_ref_ds_fil, events,event_id=epoch_dict, tmin=int_time[0], tmax=int_time[1], preload=True, baseline= None)
 epochs.save(datapath + '/' + i + '/' + i + '-_beforedrop_epo.fif',overwrite='True')
