@@ -1,3 +1,4 @@
 *.bdf
 .*/
 .DS_Store
+*_epo.fif
