@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-
-"""
-@author: Chenyu Li
-@desp: 
-"""
-
 import numpy as np
 import mne
 import matplotlib.pyplot as plt
@@ -13,71 +6,65 @@ from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
 from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix
-from pathlib import Path
+from sklearn.preprocessing import StandardScaler
 from joblib import Parallel, delayed
-from tqdm import tqdm
-
 
 # Step 1: Load and preprocess data
-
-# Directory where .fif files are stored
 data_dir = Path.cwd() / "epochs"
-
 X_list = []
 y_list = []
 
-# Load each .fif file and extract data and labels
 for fif_file in data_dir.glob("*_cleaned_epo.fif"):
     epochs = mne.read_epochs(fif_file, preload=True)
-
-    # Extract data and labels (assuming events have been coded correctly)
-    data = epochs.get_data(picks=[i for i in epochs.ch_names if i != 'Status'])  # shape: (n_epochs, n_channels, n_times)
-    labels = epochs.events[:, -1]  # Assuming last column has category codes
-
-    # Append to the overall dataset
+    data = epochs.get_data(picks=[i for i in epochs.ch_names if i != 'Status'])
+    labels = epochs.events[:, -1]  
     X_list.append(data)
     y_list.append(labels)
 
-# Convert lists to numpy arrays
-X = np.concatenate(X_list, axis=0)  # Shape: (n_epochs, n_channels, n_times)
-y = np.concatenate(y_list, axis=0)  # Shape: (n_epochs,)
+if not X_list or not y_list:
+    raise ValueError("No data was loaded. Ensure the directory and file naming conventions are correct.")
 
-# Reshape the data for MVPA
+X = np.concatenate(X_list, axis=0)
+y = np.concatenate(y_list, axis=0)
 n_samples, n_channels, n_times = X.shape
-X_reshaped = X.reshape(n_samples, n_channels * n_times)  # Shape: (n_epochs, n_channels * n_times)
+X_reshaped = X.reshape(n_samples, n_channels * n_times)
 
-# Step 2: Train a classifier
-classifier = SVC(kernel='linear', probability=True)
+# Scale the data
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_reshaped)
 
-# Cross-validation
-cv = StratifiedKFold(n_splits=5, shuffle=True,)
+# Step 2: Initialize the SVM with class_weight balanced
+classifier = SVC(kernel='linear', probability=True, class_weight='balanced')
+cv = StratifiedKFold(n_splits=5, shuffle=True)
 predictions = []
 true_labels = []
 
 def train_and_predict(train_index, test_index):
-    X_train, X_test = X_reshaped[train_index], X_reshaped[test_index]
+    X_train, X_test = X_scaled[train_index], X_scaled[test_index]
     y_train, y_test = y[train_index], y[test_index]
+
+    # Print class distribution for debugging
+    print("Training set class distribution:", np.bincount(y_train))
+    print("Test set class distribution:", np.bincount(y_test))
 
     classifier.fit(X_train, y_train)
     preds = classifier.predict(X_test)
     return preds, y_test
 
-# Use tqdm to visualize progress
-results = Parallel(n_jobs=4)(
+# Parallel processing
+results = Parallel(n_jobs=5)(
     delayed(train_and_predict)(train_index, test_index) 
-    for train_index, test_index in tqdm(cv.split(X_reshaped, y), total=cv.n_splits, desc="Cross-Validation Progress")
+    for train_index, test_index in cv.split(X_scaled, y)
 )
 
+
 # Combine results
-for preds, y_test in results:
-    predictions.extend(preds)
-    true_labels.extend(y_test)
+for fold in results:
+    predictions.extend(fold[0])
+    true_labels.extend(fold[1])
 
 # Step 3: Create a confusion matrix
 conf_matrix = confusion_matrix(true_labels, predictions)
-
-
-# Plot confusion matrix
 plt.figure(figsize=(10, 8))
 sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', 
             xticklabels=['letter', 'character', 'animals', 'foods', 'tools', 'faces'],
@@ -85,20 +72,4 @@ sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues',
 plt.ylabel('True Label')
 plt.xlabel('Predicted Label')
 plt.title('Confusion Matrix')
-plt.show()
-
-# Step 4: Visualize weights of the classifier
-classifier.fit(X_reshaped, y)  # Fit on the full dataset to get feature importance
-weights = classifier.coef_
-
-# Reshape weights for visualization
-weights_reshaped = weights.reshape(n_channels, -1)  # Adjust as necessary
-
-# Plot the weights as a heatmap
-plt.figure(figsize=(12, 6))
-sns.heatmap(weights_reshaped, cmap='coolwarm', xticklabels=range(weights_reshaped.shape[1]),
-            yticklabels=[f'Channel {i}' for i in range(n_channels)])
-plt.title('Weights of the SVM Classifier per Channel')
-plt.xlabel('Time Points')
-plt.ylabel('Channels')
 plt.show()
