@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+@author: Chenyu Li
+@desp: preprocessing EEG data for nBack task
+"""
+
 import mne
 from pathlib import Path
 from autoreject import AutoReject
@@ -13,7 +19,7 @@ ar_path = Path.cwd() / "ar"
 ica_path = Path.cwd() / "ica"
 
 # Subject ID
-sub='24103002'
+sub='24102801'
 
 
 #%% Step 1: Load data
@@ -34,7 +40,7 @@ del raw
 
 # mark bad channels (if the channels are bad all the time. Otherwise, use the artifact rejection)
 raw_ref.plot()
-print(raw_ref.info['bads'])
+# print(raw_ref.info['bads'])
 
 
 
@@ -85,7 +91,10 @@ epochs64.save(savefile, overwrite=True)
 #%% Step 6: Use the AutoReject package to detect and reject bad epochs
 
 # create the AutoReject object
-ar = AutoReject(n_jobs=4, n_interpolate= [1, 4, 8])
+ar = AutoReject(
+    n_jobs=4, 
+    picks=[i for i in range(64)],
+    n_interpolate= [1, 4, 8])
 
 # fit the model and get the reject log
 epochs64_ar, reject_log = ar.fit_transform(epochs64, return_log=True) # The bad channels are automatically removed from the model fitting.
@@ -116,10 +125,10 @@ eog_indices, eog_scores = ica.find_bads_eog(epochs,["EXG2",'EXG3',"EXG4"])
 # plot components
 ica.plot_components()
 ica.plot_sources(epochs64_int)
-ica.plot_properties(epochs64_int, picks=[8])
+ica.plot_properties(epochs64_int, picks=[0, 14])
 
 # remove artifact components
-ica.exclude = [0, 1, 4, 12, 14]
+ica.exclude = [0, 2, 13]
 reconst_epochs = epochs64_int.copy()
 ica.apply(reconst_epochs)
 
