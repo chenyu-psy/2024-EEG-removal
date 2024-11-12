@@ -1,6 +1,6 @@
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import KFold
-from joblib import Parallel, delayed
+from sklearn.inspection import permutation_importance
 import joblib
 import numpy as np
 
@@ -156,9 +156,12 @@ class MVPAMultiClassClassifier:
         Returns:
         A dictionary containing accuracy and AUC scores for each fold.
         """
+
+        results = {"accuracy": [], "auc": [], "cma": []}
+
         kf = KFold(n_splits=cv, shuffle=True)
 
-        def process_fold(train_index, test_index):
+        for train_index, test_index in kf.split(X):
             X_train, X_test = X[train_index], X[test_index]
             y_train, y_test = y[train_index], y[test_index]
 
@@ -167,22 +170,45 @@ class MVPAMultiClassClassifier:
 
             # Calculate accuracy on the test set for each class
             accuracy = self.calculate_accuracy(X_test, y_test)
+            results["accuracy"].append(accuracy)
 
             # Calculate AUC on the test set for each class
             auc = self.calculate_auc(X_test, y_test)
+            results["auc"].append(auc)
 
             # Calculate confusion matrix accuracy on the test set for each class
             cma = self.calculate_confusion_matrix_accuracy(X_test, y_test)
-            
-            return accuracy, auc, cma
-
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(process_fold)(train_index, test_index) for train_index, test_index in kf.split(X)
-        )
-
-        accuracy_scores, auc_scores, cma_scores = zip(*results)
+            results["cma"].append(cma)
         
-        return {'accuracy': accuracy_scores, 'auc': auc_scores, 'cma': cma_scores}
+        return results
+    
+    def calculate_feature_importance(self, **kwargs):
+        """
+        Calculates the feature importance for each component in the model.
+
+        Returns:
+        A list containing the importance of each feature for each class.
+        """
+        if hasattr(self.classifier, 'feature_importances_'):
+            return self.classifier.feature_importances_.tolist()
+        elif hasattr(self.classifier, 'coef_'):
+            return np.abs(self.classifier.coef_).mean(axis=0).tolist()
+        elif hasattr(self.classifier, 'estimators_'):
+            # For OneVsRestClassifier, extract feature importance for each estimator
+            feature_importances = []
+            for estimator in self.classifier.estimators_:
+                if hasattr(estimator, 'coef_'):
+                    feature_importances.append(np.abs(estimator.coef_).mean(axis=0).tolist())
+                else:
+                    raise ValueError("The base classifier does not support feature importance extraction.")
+            return feature_importances
+        else:
+            try:
+                importance = permutation_importance(self.classifier, **kwargs)
+                return importance.importances_mean.tolist()
+            except AttributeError:
+                raise ValueError("The base classifier does not support feature importance extraction.")
+    
     
     def save_classifier(self, save_path):
         """
@@ -192,4 +218,3 @@ class MVPAMultiClassClassifier:
         save_path: Path to save the trained classifier.
         """
         joblib.dump(self.classifier, save_path)
-
