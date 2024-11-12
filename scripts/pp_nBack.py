@@ -8,7 +8,8 @@ import mne
 from pathlib import Path
 from autoreject import AutoReject
 import matplotlib
-matplotlib.use('Qt5Agg') # switch to GUI backend
+matplotlib.use('TkAgg') # switch to GUI backend
+# matplotlib.use('Qt5Agg') # if TkAgg doesn't work
 
 #%% Parameters
 
